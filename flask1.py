@@ -19,6 +19,7 @@ def signup():
             return jsonify({"error":"Invalid input"}),400
         username = data.get("username")
         password = data.get("password")
+        gender = data.get("gender")
         fisrt_name = data.get("first_name")
         last_name = data.get("last_name")
         email = data.get("email")
@@ -53,7 +54,7 @@ def signup():
 @app.route("/login", methods = ['POST'])
 def login():
     try:
-        data = request.json()
+        data = request.get_json()
         if not data:
             return jsonify({"error":"Invalid input"}),400
         username = data.get('username')
@@ -67,13 +68,14 @@ def login():
         if not user:
             return jsonify({"user not found"}),404
 
-        if not check_password_hash(user['password'],password):
+        if not user['password'] == password:
             return jsonify({"message":"invalid password"}),401
         
         return jsonify ({"message":"login successfully"}),200
     except Exception as e:
         traceback.print_exc()
         return jsonify({"error":str(e)}),500
+    
         
-        if __name__ =='__main__':
-            app.run(debug = True)
+if __name__ =='__main__':
+     app.run(debug = True)
