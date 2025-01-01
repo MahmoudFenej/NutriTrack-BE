@@ -7,6 +7,8 @@ app = Flask(__name__)
 client = MongoClient('mongodb+srv://israa:NutriTrack-123@cluster0.ff8mp.mongodb.net/')
 db = client["NutriTrack"]
 user_collection = db['USER']
+meal_collection = db['MEALS']
+
 @app.route("/")
 def index():
     return '<h1>Hello, world!</h1>'
@@ -76,6 +78,15 @@ def login():
         traceback.print_exc()
         return jsonify({"error":str(e)}),500
     
-        
+@app.route("/meals", methods = ['GET'])
+def get_meals():
+    try:
+        meals = list(meal_collection.find({}, {"_id": 0 }))
+        return jsonify({"meals":meals}),200
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"error":"An error occurred"})
+
+
 if __name__ =='__main__':
      app.run(debug = True)
