@@ -8,6 +8,7 @@ client = MongoClient('mongodb+srv://israa:NutriTrack-123@cluster0.ff8mp.mongodb.
 db = client["NutriTrack"]
 user_collection = db['USER']
 meal_collection = db['MEALS']
+plan_collection = db['PLAN']
 
 @app.route("/")
 def index():
@@ -86,7 +87,14 @@ def get_meals():
     except Exception as e:
         traceback.print_exc()
         return jsonify({"error":"An error occurred"})
-
+@app.route("/plan", methods = ["GET"])
+def get_plan_goal_day():
+    try:
+        plan = list(plan_collection.find({}, {"_id":0}))
+        return jsonify({"plan":plan}),200
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"error":"An error occurred"})
 
 if __name__ =='__main__':
      app.run(debug = True)
