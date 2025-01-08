@@ -91,6 +91,13 @@ def get_meals():
 def get_plan_goal_day():
     try:
         plan = list(plan_collection.find({}, {"_id":0}))
+        meals = list(meal_collection.find({}, {"_id":0}))
+        meal_dict = {meal['id']: meal for meal in meals}
+        for p in plan:
+            for day in p.get("Days",[]):
+                meal_id = meal.get("mealId")
+                if meal_id in meal_dict:
+                    meal['details'] = meal_dict
         return jsonify({"plan":plan}),200
     except Exception as e:
         traceback.print_exc()
