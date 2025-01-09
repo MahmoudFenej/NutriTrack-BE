@@ -79,26 +79,47 @@ def login():
         traceback.print_exc()
         return jsonify({"error":str(e)}),500
     
+
+def get_meals_list ():
+    meals = meal_collection.find()
+    meal_list = [meal for meal in meals]
+    return meal_list
+
 @app.route("/meals", methods = ['GET'])
 def get_meals():
     try:
-        meals = list(meal_collection.find({}, {"_id": 0 }))
-        return jsonify({"meals":meals}),200
+        meal_list = get_meals_list()
+        return jsonify({"meals":meal_list}),200
     except Exception as e:
         traceback.print_exc()
         return jsonify({"error":"An error occurred"})
+
+
 @app.route("/plan", methods = ["GET"])
 def get_plan_goal_day():
     try:
-        plan = list(plan_collection.find({}, {"_id":0}))
-        meals = list(meal_collection.find({}, {"_id":0}))
-        meal_dict = {meal['id']: meal for meal in meals}
-        for p in plan:
-            for day in p.get("Days",[]):
-                meal_id = meal.get("mealId")
-                if meal_id in meal_dict:
-                    meal['details'] = meal_dict
-        return jsonify({"plan":plan}),200
+
+        plans = plan_collection.find()
+        plan_list = [plan for plan in plans]
+        meal_list = get_meals_list()
+
+        meal_lookup = {str(meal['_id']): meal for meal in meal_list}
+
+        for plan in plan_list:
+            for day in plan.get('Days', []):
+                for meal_category in day.get('meals', []):
+                    for meal in meal_category.get('meal', []):
+                        meal_id = str(meal.get('mealId')) 
+                        db_meal_id = meal_lookup.get(meal_id)
+                        if db_meal_id:
+                            meal['details'] = db_meal_id
+                        else: 
+                            meal['details'] = None
+
+                    
+        return jsonify({"plan":plan_list}),200
+    
+
     except Exception as e:
         traceback.print_exc()
         return jsonify({"error":"An error occurred"})
