@@ -2,6 +2,9 @@ from flask import Flask, jsonify,request
 from pymongo import MongoClient
 from werkzeug.security import generate_password_hash, check_password_hash
 import traceback
+import cohere
+import random
+
 app = Flask(__name__)
 
 client = MongoClient('mongodb+srv://israa:NutriTrack-123@cluster0.ff8mp.mongodb.net/')
@@ -9,6 +12,7 @@ db = client["NutriTrack"]
 user_collection = db['USER']
 meal_collection = db['MEALS']
 plan_collection = db['PLAN']
+api_key = "dT6zyIAY3MMPNZttCZAkYN0fiJJShRIUKeZupjYk"
 
 @app.route("/")
 def index():
@@ -94,7 +98,6 @@ def get_meals():
         traceback.print_exc()
         return jsonify({"error":"An error occurred"})
 
-
 @app.route("/plan", methods = ["GET"])
 def get_plan_goal_day():
     try:
@@ -124,5 +127,54 @@ def get_plan_goal_day():
         traceback.print_exc()
         return jsonify({"error":"An error occurred"})
 
-if __name__ =='__main__':
-     app.run(debug = True)
+
+
+@app.route("/generatePlan", methods=["GET"])
+def generatePlan():
+    cohere_client = cohere.Client(api_key)
+    meal_plan = {}
+    meals_list = get_meals_list()
+
+    categorized_meals = {
+        "breakfast": [meal for meal in meals_list if meal["category"] == "breakfast"],
+        "snack": [meal for meal in meals_list if meal["category"] == "snack"],
+        "lunch": [meal for meal in meals_list if meal["category"] == "lunch"],
+        "dinner": [meal for meal in meals_list if meal["category"] == "dinner"]
+    }
+
+    for day in range(1, 15):
+        daily_plan = {}
+
+        prompt = (
+            f"Create a weight loss meal plan for Day {day}. Focus on healthy, low-calorie options with balanced nutrition."
+            " Choose meals from the database categories: breakfast, snack, lunch, and dinner."
+        )
+
+        response = cohere_client.generate(
+            model="command",
+            prompt=prompt,
+            max_tokens=150,
+            temperature=0.7,
+        )
+        response_text = response.generations[0].text.strip()
+        
+        # Choose meals for each category based on the database
+        daily_plan["breakfast"] = random.choice(categorized_meals["breakfast"])["name"]
+        daily_plan["snack_1"] = random.choice(categorized_meals["snack"])["name"]
+        daily_plan["lunch"] = random.choice(categorized_meals["lunch"])["name"]
+        daily_plan["snack_2"] = random.choice(categorized_meals["snack"])["name"]
+        daily_plan["dinner"] = random.choice(categorized_meals["dinner"])["name"]
+
+        meal_plan[f"Day {day}"] = {
+            "plan_description": response_text,
+            "meals": daily_plan
+        }
+
+    plan_collection.insert_one({"generated_plan": meal_plan})
+
+    return jsonify(meal_plan), 200
+
+
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000, debug=True)
