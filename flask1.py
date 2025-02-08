@@ -128,50 +128,114 @@ def get_plan_goal_day():
         return jsonify({"error":"An error occurred"})
 
 
-
-@app.route("/generatePlan", methods=["GET"])
+@app.route("/generatePlan", methods=["POST"])
 def generatePlan():
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "Invalid input"}), 400
+    
+    age = data.get("age")
+    gender = data.get("gender")
+    weight = data.get("weight")
+    height = data.get("height")
+    goal = data.get("goal")
+
     cohere_client = cohere.Client(api_key)
-    meal_plan = {}
-    meals_list = get_meals_list()
+    meal_plan = {"plan": []}
 
-    categorized_meals = {
-        "breakfast": [meal for meal in meals_list if meal["category"] == "breakfast"],
-        "snack": [meal for meal in meals_list if meal["category"] == "snack"],
-        "lunch": [meal for meal in meals_list if meal["category"] == "lunch"],
-        "dinner": [meal for meal in meals_list if meal["category"] == "dinner"]
-    }
+    prompt = (
+        f"Create a balanced 14-day meal plan focusing on the goal of {goal}. "
+        f"Each day should include meals in the following categories: breakfast, lunch, dinner, snack_1, and snack_2. "
+        f"Each meal should be healthy and tailored for an individual with age {age}, gender {gender}, "
+        f"weight {weight}kg, and height {height}cm. The meals should have a good balance of protein, "
+        f"carbs, and healthy fats, and should fit within a healthy calorie range. "
+        f"Please include a description for each day and provide the following details for each meal: "
+        f"- name: The name of the meal. "
+        f"- calories: The calorie count. "
+        f"- carbs: The carbohydrate content. "
+        f"- fat: The fat content. "
+        f"- protein: The protein content. "
+        f"Here is the format you should follow for each day:\n"
+        "Day 1:\n"
+        "- Breakfast: [meal_name] (calories: [X], carbs: [Y], fat: [Z], protein: [W])\n"
+        "- Snack 1: [meal_name] (calories: [X], carbs: [Y], fat: [Z], protein: [W])\n"
+        "- Lunch: [meal_name] (calories: [X], carbs: [Y], fat: [Z], protein: [W])\n"
+        "- Snack 2: [meal_name] (calories: [X], carbs: [Y], fat: [Z], protein: [W])\n"
+        "- Dinner: [meal_name] (calories: [X], carbs: [Y], fat: [Z], protein: [W])\n"
+        "\nRepeat for 14 days."
+    )
 
-    for day in range(1, 15):
-        daily_plan = {}
+    # Make a single call to generate the full 14-day meal plan
+    response = cohere_client.generate(
+        model="command",
+        prompt=prompt,
+        max_tokens=3000,  # Increase tokens to accommodate detailed meal information
+        temperature=0.7,
+    )
 
-        prompt = (
-            f"Create a weight loss meal plan for Day {day}. Focus on healthy, low-calorie options with balanced nutrition."
-            " Choose meals from the database categories: breakfast, snack, lunch, and dinner."
-        )
+    response_text = response.generations[0].text.strip()
 
-        response = cohere_client.generate(
-            model="command",
-            prompt=prompt,
-            max_tokens=150,
-            temperature=0.7,
-        )
-        response_text = response.generations[0].text.strip()
-        
-        # Choose meals for each category based on the database
-        daily_plan["breakfast"] = random.choice(categorized_meals["breakfast"])["name"]
-        daily_plan["snack_1"] = random.choice(categorized_meals["snack"])["name"]
-        daily_plan["lunch"] = random.choice(categorized_meals["lunch"])["name"]
-        daily_plan["snack_2"] = random.choice(categorized_meals["snack"])["name"]
-        daily_plan["dinner"] = random.choice(categorized_meals["dinner"])["name"]
+    # Split the response text into days
+    days = response_text.split("\n\n")  # Assuming days are separated by two newlines
 
-        meal_plan[f"Day {day}"] = {
-            "plan_description": response_text,
-            "meals": daily_plan
+    for day_index, day_text in enumerate(days, 1):
+        daily_plan = {
+            "day": str(day_index),
+            "meals": []
         }
 
-    plan_collection.insert_one({"generated_plan": meal_plan})
+        # Split the day text into individual meals
+        meals = day_text.split("\n")
+        for meal in meals:
+            if meal.strip():
+                try:
+                    # Extract meal category and details
+                    category, meal_details = meal.split(": ", 1)
+                    category = category.strip("- ").capitalize()
 
+                    # Check if the meal_details contains parentheses before splitting
+                    if "(" in meal_details and ")" in meal_details:
+                        meal_name = meal_details.split("(")[0].strip()
+                        details = meal_details.split("(")[1].strip(")").split(", ")
+                        details_dict = {}
+                        for detail in details:
+                            key, value = detail.split(": ")
+                            details_dict[key] = value
+                    else:
+                        # Handle case where parentheses are missing
+                        print(f"Skipping meal due to missing details in: {meal}")
+                        continue
+
+                    # Generate a unique ID for the meal
+                    meal_id = str(uuid.uuid4())
+
+                    # Structure the meal data
+                    meal_data = {
+                        "category": category,
+                        "meal": {
+                            "_id": meal_id,
+                            "calories": details_dict.get("calories", "N/A"),
+                            "carbs": details_dict.get("carbs", "N/A"),
+                            "fat": details_dict.get("fat", "N/A"),
+                            "name": meal_name,
+                            "protein": details_dict.get("protein", "N/A"),
+                            "quantity": "1"  # Default quantity, can be adjusted
+                        },
+                        "mealId": meal_id
+                    }
+
+                    daily_plan["meals"].append(meal_data)
+                except ValueError as e:
+                    # Handle cases where the meal string doesn't match the expected format
+                    print(f"Error parsing meal: {meal}. Error: {e}")
+                    continue
+
+        meal_plan["plan"].append(daily_plan)
+
+    # Print the structured meal plan for debugging (can be removed later)
+    print(meal_plan)
+
+    # Return the final structured meal plan as JSON
     return jsonify(meal_plan), 200
 
 
