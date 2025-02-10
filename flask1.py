@@ -4,6 +4,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 import traceback
 import cohere
 import uuid
+from bson.objectid import ObjectId
 
 app = Flask(__name__)
 
@@ -98,17 +99,21 @@ def get_meals():
         traceback.print_exc()
         return jsonify({"error":"An error occurred"})
 
-@app.route("/plan", methods = ["GET"])
-def get_plan_goal_day():
+@app.route("/plan/<user_id>", methods = ["GET"])
+def get_plan_goal_day(user_id):
     try:
+         user_id = ObjectId(user_id)
+         user = user_collection.find_one({"_id":user_id})
+         if not user:
+            return jsonify({"error":"User not found"}), 404
+         user_goal = user.get("goal")
+         plans = plan_collection.find({"goal": user_goal})
+         plan_list = [plan for plan in plans]
+         meal_list = get_meals_list()
 
-        plans = plan_collection.find()
-        plan_list = [plan for plan in plans]
-        meal_list = get_meals_list()
+         meal_lookup = {str(meal['_id']): meal for meal in meal_list}
 
-        meal_lookup = {str(meal['_id']): meal for meal in meal_list}
-
-        for plan in plan_list:
+         for plan in plan_list:
             for day in plan.get('Days', []):
                 for meal_category in day.get('meals', []):
                     for meal in meal_category.get('meal', []):
@@ -120,7 +125,7 @@ def get_plan_goal_day():
                             meal['details'] = None
 
                     
-        return jsonify({"plan":plan_list}),200
+         return jsonify({"plan":plan_list}),200
     
 
     except Exception as e:
