@@ -5,6 +5,7 @@ import traceback
 import cohere
 import uuid
 from bson.objectid import ObjectId
+import random
 
 app = Flask(__name__)
 
@@ -13,6 +14,7 @@ db = client["NutriTrack"]
 user_collection = db['USER']
 meal_collection = db['MEALS']
 plan_collection = db['PLAN']
+generateplan_collection = db['generatePlan']
 api_key = "dT6zyIAY3MMPNZttCZAkYN0fiJJShRIUKeZupjYk"
 
 @app.route("/")
@@ -102,18 +104,30 @@ def get_meals():
 @app.route("/plan/<user_id>", methods = ["GET"])
 def get_plan_goal_day(user_id):
     try:
-         user_id = ObjectId(user_id)
-         user = user_collection.find_one({"_id":user_id})
-         if not user:
+        plan_type = request.args.get('type', 'plan')
+        user_id = ObjectId(user_id)
+        user = user_collection.find_one({"_id":user_id})
+        if not user:
             return jsonify({"error":"User not found"}), 404
-         user_goal = user.get("goal")
-         plans = plan_collection.find({"goal": user_goal})
-         plan_list = [plan for plan in plans]
-         meal_list = get_meals_list()
+        user_goal = user.get("goal")
 
-         meal_lookup = {str(meal['_id']): meal for meal in meal_list}
+        if plan_type == 'generateplan':
+            # Fetch a new plan from the generateplan collection
+            plans = generateplan_collection.find({"goal": user_goal})
+            if plans:
+                # Randomly select a plan from the available plans
+                plan = random.choice(plans)
+                plan_list = [plan]
+            else:
+                return jsonify({"error": "No generateplan found for the user's goal"}), 404
+        else:
+            plans = plan_collection.find({"goal": user_goal})
+            plan_list = [plan for plan in plans]
+            meal_list = get_meals_list()
 
-         for plan in plan_list:
+        meal_lookup = {str(meal['_id']): meal for meal in meal_list}
+
+        for plan in plan_list:
             for day in plan.get('Days', []):
                 for meal_category in day.get('meals', []):
                     for meal in meal_category.get('meal', []):
@@ -125,7 +139,7 @@ def get_plan_goal_day(user_id):
                             meal['details'] = None
 
                     
-         return jsonify({"plan":plan_list}),200
+        return jsonify({"plan":plan_list}),200
     
 
     except Exception as e:
