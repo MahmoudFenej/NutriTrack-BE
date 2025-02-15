@@ -61,30 +61,35 @@ def signup():
         traceback.print_exc()
         return jsonify({"error":str(e)}),500
 
-@app.route("/login", methods = ['POST'])
+@app.route("/login", methods=['POST'])
 def login():
     try:
         data = request.get_json()
         if not data:
-            return jsonify({"error":"Invalid input"}),400
+            return jsonify({"error": "Invalid input"}), 400
+
         username = data.get('username')
         password = data.get('password')
-        if not username or not password: 
-            return jsonify({"error":"Username and password are required"}),400
 
+        if not username or not password:
+            return jsonify({"error": "Username and password are required"}), 400
 
-        user = user_collection.find_one({'username':username})
+        user = user_collection.find_one({'username': username})
 
         if not user:
-            return jsonify({"user not found"}),404
+            return jsonify({"error": "User not found"}), 404
 
-        if not user['password'] == password:
-            return jsonify({"message":"invalid password"}),401
-        
-        return jsonify ({"message":"login successfully"}),200
+        if user['password'] != password:
+            return jsonify({"error": "Invalid password"}), 401
+
+        user.pop('password', None)
+
+        user['_id'] = str(user['_id'])
+
+        return jsonify(user), 200
+
     except Exception as e:
-        traceback.print_exc()
-        return jsonify({"error":str(e)}),500
+        return jsonify({"error": str(e)}), 500
     
 
 def get_meals_list ():
