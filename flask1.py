@@ -123,28 +123,29 @@ def get_plan_goal_day():
             plans = generateplan_collection.find_one({"user_id": user_id})
             if plans:
                 plans["_id"] = str(plans["_id"])
-                return jsonify({"plan": plans}), 200
+                return jsonify({"plan": [plans]}), 200
         if goal:
             plans = list(plan_collection.find({"goal": goal}))
             for plan in plans:
                 plan["_id"] = str(plan["_id"])
         
-        plan_list = [plan for plan in plans]
-        meal_list = get_meals_list()
+            plan_list = [plan for plan in plans]
+            meal_list = get_meals_list()
 
-        meal_lookup = {str(meal['_id']): meal for meal in meal_list}
+            meal_lookup = {str(meal['_id']): meal for meal in meal_list}
 
-        for plan in plan_list:
-            for day in plan.get('Days', []):
-                for meal_category in day.get('meals', []):
-                    for meal in meal_category.get('meal', []):
-                        meal_id = str(meal.get('mealId')) 
-                        db_meal_id = meal_lookup.get(meal_id)
-                        if db_meal_id:
-                            meal['details'] = db_meal_id
-                        else: 
-                            meal['details'] = None
-                return jsonify({"plan": plans}), 200
+            for plan in plan_list:
+                for day in plan.get('Days', []):
+                    for meal_category in day.get('meals', []):
+                        for meal in meal_category.get('meal', []):
+                            meal_id = str(meal.get('mealId')) 
+                            db_meal_id = meal_lookup.get(meal_id)
+                            if db_meal_id:
+                                meal['details'] = db_meal_id
+                            else: 
+                                meal['details'] = None
+
+            return jsonify({"plan": plans}), 200
 
 
         return jsonify({"plan": plans}), 200
