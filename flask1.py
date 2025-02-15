@@ -5,8 +5,8 @@ import traceback
 import cohere
 import uuid
 from bson.objectid import ObjectId
-import random
-
+from bson import ObjectId
+from flask import jsonify
 app = Flask(__name__)
 
 client = MongoClient('mongodb+srv://israa:NutriTrack-123@cluster0.ff8mp.mongodb.net/')
@@ -14,7 +14,7 @@ db = client["NutriTrack"]
 user_collection = db['USER']
 meal_collection = db['MEALS']
 plan_collection = db['PLAN']
-generateplan_collection = db['generatePlan']
+generateplan_collection = db['GENERATE_PLAN']
 api_key = "dT6zyIAY3MMPNZttCZAkYN0fiJJShRIUKeZupjYk"
 
 @app.route("/")
@@ -101,29 +101,31 @@ def get_meals():
         traceback.print_exc()
         return jsonify({"error":"An error occurred"})
 
-@app.route("/plan/<user_id>", methods = ["GET"])
-def get_plan_goal_day(user_id):
-    try:
-        plan_type = request.args.get('type', 'plan')
-        user_id = ObjectId(user_id)
-        user = user_collection.find_one({"_id":user_id})
-        if not user:
-            return jsonify({"error":"User not found"}), 404
-        user_goal = user.get("goal")
 
-        if plan_type == 'generateplan':
-            # Fetch a new plan from the generateplan collection
-            plans = generateplan_collection.find({"goal": user_goal})
+@app.route("/plan", methods=["POST"])
+def get_plan_goal_day():
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "Invalid input"}), 400
+
+        user_id = data.get("user_id")
+        goal = data.get("goal")
+
+        plans = None
+
+        if user_id:
+            plans = generateplan_collection.find_one({"user_id": user_id})
             if plans:
-                # Randomly select a plan from the available plans
-                plan = random.choice(plans)
-                plan_list = [plan]
-            else:
-                return jsonify({"error": "No generateplan found for the user's goal"}), 404
-        else:
-            plans = plan_collection.find({"goal": user_goal})
-            plan_list = [plan for plan in plans]
-            meal_list = get_meals_list()
+                plans["_id"] = str(plans["_id"])
+                return jsonify({"plan": plans}), 200
+        if goal:
+            plans = list(plan_collection.find({"goal": goal}))
+            for plan in plans:
+                plan["_id"] = str(plan["_id"])
+        
+        plan_list = [plan for plan in plans]
+        meal_list = get_meals_list()
 
         meal_lookup = {str(meal['_id']): meal for meal in meal_list}
 
@@ -137,14 +139,13 @@ def get_plan_goal_day(user_id):
                             meal['details'] = db_meal_id
                         else: 
                             meal['details'] = None
+                return jsonify({"plan": plans}), 200
 
-                    
-        return jsonify({"plan":plan_list}),200
-    
+
+        return jsonify({"plan": plans}), 200
 
     except Exception as e:
-        traceback.print_exc()
-        return jsonify({"error":"An error occurred"})
+        return jsonify({"error": str(e)}), 500
 
 
 cohere_client = cohere.Client(api_key)
@@ -160,8 +161,10 @@ def generatePlan():
     weight = data.get("weight")
     height = data.get("height")
     goal = data.get("goal")
+    user_id = data.get("user_id")
 
-    meal_plan = {"plan": []}
+    if not user_id:
+        return jsonify({"error": "User ID is required"}), 400
 
     prompt = (
         f"Create a balanced 14-day meal plan focusing on the goal of {goal}. "
@@ -188,23 +191,20 @@ def generatePlan():
 
     response_text = response.generations[0].text.strip()
 
-    # Debugging: Print Cohere's response
     print("Cohere Response:\n", response_text)
 
     days = [d.strip() for d in response_text.split("\n\n") if d.strip()]
+    current_day = 1  
 
-    current_day = 1  # Track day number manually
+    plan_days = []  # This will be a list of day objects
 
     for day_text in days:
         if not day_text.lower().startswith(f"day {current_day}"):
             print(f"Expected 'Day {current_day}' but got: {day_text[:15]}")
-            continue  # Skip malformed or out-of-order entries
+            continue 
 
-        daily_plan = {
-            "day": str(current_day),
-            "meals": [],
-            "total_calories": 0  # Initialize total_calories
-        }
+        daily_meals = []
+        total_calories = 0  # Initialize total calories for the day
 
         meals = day_text.split("\n")
         for meal in meals:
@@ -231,37 +231,34 @@ def generatePlan():
                             else:
                                 print(f"Skipping malformed detail: {detail}")
 
-                        meal_id = str(uuid.uuid4())
-
-                        # Extract portion size if available
                         portion = details_dict.get("portion", "1 serving")
 
-                        # Convert calorie value to integer if possible
                         calorie_value = details_dict.get("calories", "0")
                         try:
                             calorie_value = int(calorie_value)
                         except ValueError:
-                            calorie_value = 0  # Default to 0 if parsing fails
+                            calorie_value = 0  
 
-                        # Debugging: Check parsed values
+                        # Add to total calories for the day
+                        total_calories += calorie_value
+
                         print(f"Parsed meal: {meal_name}, Calories: {calorie_value}")
 
-                        meal_data = {
-                            "category": category,
-                            "meal": {
-                                "_id": meal_id,
-                                "name": meal_name,
-                                "calories": calorie_value,
+                        meal_object = {
+                            "quantity": portion,
+                            "details": {
+                                "calories": details_dict.get("calories", "N/A"),
                                 "carbs": details_dict.get("carbs", "N/A"),
                                 "fat": details_dict.get("fat", "N/A"),
-                                "protein": details_dict.get("protein", "N/A"),
-                                "quantity": portion
-                            },
-                            "mealId": meal_id
+                                "name": meal_name,
+                                "protein": details_dict.get("protein", "N/A")
+                            }
                         }
 
-                        daily_plan["meals"].append(meal_data)
-                        daily_plan["total_calories"] += calorie_value  # Add to total
+                        daily_meals.append({
+                            "category": category,
+                            "meal": [meal_object]
+                        })
 
                     else:
                         print(f"Skipping meal due to missing details: {meal}")
@@ -270,16 +267,42 @@ def generatePlan():
                     print(f"Error parsing meal: {meal}. Error: {e}")
                     continue
 
-        if daily_plan["meals"]:  # Only add days with meals
-            meal_plan["plan"].append(daily_plan)
-            current_day += 1  # Move to the next day
+        if daily_meals: 
+            # Wrap the day's meals in an object with day number and total calories
+            day_object = {
+                "day": current_day,
+                "meals": daily_meals,
+                "total_calories": total_calories
+            }
+            plan_days.append(day_object)  # Append the day object to the list
+            current_day += 1 
 
-    print("Final Meal Plan:\n", meal_plan)
+    final_plan = {
+        "goal": goal,
+        "description": f"14-day meal plan for {goal} tailored to a {age}-year-old {gender} weighing {weight}kg and {height}cm tall.",
+        "Days": plan_days,  # Now Days is a list of day objects
+        "user_id": user_id
+    }
 
-    return jsonify(meal_plan), 200
+    # Check if a plan already exists for the user
+    existing_plan = generateplan_collection.find_one({"user_id": user_id})
+    
+    if existing_plan:
+        # Update the existing plan
+        generateplan_collection.update_one(
+            {"user_id": user_id},  # Filter
+            {"$set": final_plan}   # Update fields
+        )
+    else:
+        # Insert a new plan
+        result = generateplan_collection.insert_one(final_plan)
+        final_plan["_id"] = str(result.inserted_id)  # Convert ObjectId to string
 
+    # Convert ObjectId to string in the final_plan
+    if "_id" in final_plan:
+        final_plan["_id"] = str(final_plan["_id"])
 
-
+    return jsonify(final_plan), 200
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
