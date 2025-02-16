@@ -153,12 +153,8 @@ def get_plan_goal_day():
 
 cohere_client = cohere.Client(api_key)
 
-@app.route("/generatePlan", methods=["POST"])
-def generatePlan():
-    data = request.get_json()
-    if not data:
-        return jsonify({"error": "Invalid input"}), 400
-
+def generatePlan(data):
+    print("started")
     age = data.get("age")
     gender = data.get("gender")
     weight = data.get("weight")
@@ -305,7 +301,20 @@ def generatePlan():
     if "_id" in final_plan:
         final_plan["_id"] = str(final_plan["_id"])
 
-    return jsonify(final_plan), 200
+    print(final_plan)
 
+
+import threading
+
+@app.route("/generatePlan", methods=["POST"])
+def generate_plan():
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "Invalid input"}), 400
+
+    thread = threading.Thread(target=generatePlan, args=(data,))
+    thread.start()
+
+    return jsonify({"message": "Processing started"}), 202
 if __name__ == '__main__':
-    app.run()
+    app.run(debug=True)
