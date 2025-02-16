@@ -3,9 +3,6 @@ from pymongo import MongoClient
 from werkzeug.security import generate_password_hash, check_password_hash
 import traceback
 import cohere
-import uuid
-from bson.objectid import ObjectId
-from bson import ObjectId
 from flask import jsonify
 app = Flask(__name__)
 

@@ -1,0 +1,4 @@
+Flask==2.0.1
+Werkzeug==2.2.2
+pymongo==4.8.0
+cohere==5.13.6
