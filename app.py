@@ -166,9 +166,9 @@ def generatePlan(data):
         return jsonify({"error": "User ID is required"}), 400
 
     prompt = (
-        f"Create a balanced 14-day meal plan focusing on the goal of {goal}. "
+        f"Create a balanced 14-day meal plan focusing on the goal of {goal.lower()}. "
         f"Each day should include meals: breakfast, lunch, dinner, snack_1, and snack_2. "
-        f"Each meal should be healthy for an individual with age {age}, gender {gender}, "
+        f"Each meal should be healthy for an individual with age {age}, gender {gender.lower()}, "
         f"weight {weight}kg, and height {height}cm, with a balance of protein, carbs, and healthy fats. "
         f"Provide meal details including name, calories, carbs, fat, protein, and portion size if available.\n"
         f"Format:\n"
@@ -184,8 +184,8 @@ def generatePlan(data):
     response = cohere_client.generate(
         model="command",
         prompt=prompt,
-        max_tokens=3000,
-        temperature=0.7,
+        # max_tokens=3000,
+        # temperature=0.7,
     )
 
     response_text = response.generations[0].text.strip()
